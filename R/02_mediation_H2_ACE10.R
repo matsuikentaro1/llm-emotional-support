@@ -4,30 +4,62 @@
 # Exposure:  ACE-10 >= 4 (T1, binary, CDC-Kaiser 10-item)
 # Mediator:  LLM emotional support frequency (T2)
 # Outcome:   K6 at T3 (continuous, 0-24)
-# Covariates: K6_T1 (cont), age, sex, BMI,
-#             education, smoking, alcohol, physical illness
+# Covariates: K6_T1, age, sex, education (3-cat),
+#             household income (5-cat incl. unknown),
+#             marital status (3-cat), employment (4-cat),
+#             smoking, alcohol, physical illness, psychiatric illness (lifetime)
 # ============================================================
 
 library(mediation)
 library(dplyr)
+library(car)  # for VIF
 
 data_path <- file.path(getwd(), "data", "3wave_analysis.csv")
 output_path <- file.path(getwd(), "analysis")
 
-d <- read.csv(data_path, fileEncoding = "UTF-8-BOM")
+d <- read.csv(data_path, fileEncoding = "UTF-8-BOM", na.strings = c("", "NA"))
 cat("N =", nrow(d), "\n")
 
 d$llm_any <- as.integer(d$llm_mental >= 2)
 
+# Factor encoding with explicit reference levels
+d$edu_3cat        <- factor(d$edu_3cat,        levels = c("high_school", "vocational", "university"))
+d$income_5cat     <- factor(d$income_5cat,     levels = c("mid", "low", "mid_high", "high", "unknown"))
+d$marital_3cat    <- factor(d$marital_3cat,    levels = c("married", "never", "separated"))
+d$employment_4cat <- factor(d$employment_4cat, levels = c("regular", "non_regular", "self_employed", "not_working"))
+
 vars_needed <- c("K6_T1", "K6_T3", "ace10_4", "ace10_count",
                  "llm_any", "llm_mental", "llm_gen_max",
-                 "age", "female", "bmi", "edu_high",
-                 "smoking", "alcohol", "physical_illness")
+                 "age", "female",
+                 "edu_3cat", "income_5cat", "marital_3cat", "employment_4cat",
+                 "smoking", "alcohol", "physical_illness", "psychiatric_illness")
 d_cc <- d[complete.cases(d[, vars_needed]), ]
 cat("Complete cases:", nrow(d_cc), "\n")
 cat(sprintf("  ACE-10 >= 4 (T1): %d (%.1f%%)\n", sum(d_cc$ace10_4), mean(d_cc$ace10_4)*100))
 cat(sprintf("  LLM any use:      %d (%.1f%%)\n", sum(d_cc$llm_any), mean(d_cc$llm_any)*100))
 cat(sprintf("  Male: %d  Female: %d\n\n", sum(d_cc$female==0), sum(d_cc$female==1)))
+
+# ============================================================
+# Pre-flight VIF check (gate) — abort if any VIF > 5
+# ============================================================
+cat(strrep("=", 60), "\n")
+cat("Pre-flight VIF check (gate: stop if any VIF > 5)\n")
+cat(strrep("=", 60), "\n")
+vif_model <- lm(K6_T3 ~ ace10_4 + llm_mental + K6_T1 + age + female +
+                  edu_3cat + income_5cat + marital_3cat + employment_4cat +
+                  smoking + alcohol + physical_illness + psychiatric_illness, data = d_cc)
+vif_vals <- car::vif(vif_model)
+print(vif_vals)
+# vif() returns matrix for factor terms; use GVIF^(1/(2*Df)) as the comparable scale
+vif_scalar <- if (is.matrix(vif_vals)) vif_vals[, "GVIF^(1/(2*Df))"]^2 else vif_vals
+cat("\nScalar VIF (squared adjusted GVIF for factors):\n")
+print(round(vif_scalar, 3))
+if (any(vif_scalar > 5)) {
+  stop("VIF > 5 detected in one or more covariates. Investigation required before continuing. ",
+       "Offending variables: ",
+       paste(names(vif_scalar)[vif_scalar > 5], collapse = ", "))
+}
+cat("\n>>> All VIFs <= 5. Proceeding to mediation analyses.\n\n")
 
 SIMS <- 5000
 
@@ -39,10 +71,10 @@ cat("MAIN: ACE-10>=4 (T1) -> LLM mental freq (continuous) -> K6_T3\n")
 cat(sprintf("N = %d\n", nrow(d_cc)))
 cat(strrep("=", 60), "\n\n")
 
-med_main <- lm(llm_mental ~ ace10_4 + K6_T1 + age + female + bmi + edu_high +
-                 smoking + alcohol + physical_illness, data = d_cc)
-out_main <- lm(K6_T3 ~ ace10_4 + llm_mental + K6_T1 + age + female + bmi +
-                 edu_high + smoking + alcohol + physical_illness, data = d_cc)
+med_main <- lm(llm_mental ~ ace10_4 + K6_T1 + age + female + edu_3cat + income_5cat + marital_3cat + employment_4cat +
+                 smoking + alcohol + physical_illness + psychiatric_illness, data = d_cc)
+out_main <- lm(K6_T3 ~ ace10_4 + llm_mental + K6_T1 + age + female + edu_3cat + income_5cat + marital_3cat + employment_4cat +
+                 smoking + alcohol + physical_illness + psychiatric_illness, data = d_cc)
 
 cat("-- Path a --\n")
 print(summary(med_main)$coefficients["ace10_4", ])
@@ -63,11 +95,11 @@ cat("SENSITIVITY 1: ACE-10>=4 -> LLM any use (binary) -> K6_T3\n")
 cat(sprintf("N = %d\n", nrow(d_cc)))
 cat(strrep("=", 60), "\n\n")
 
-med_s1 <- glm(llm_any ~ ace10_4 + K6_T1 + age + female + bmi + edu_high +
-                smoking + alcohol + physical_illness,
+med_s1 <- glm(llm_any ~ ace10_4 + K6_T1 + age + female + edu_3cat + income_5cat + marital_3cat + employment_4cat +
+                smoking + alcohol + physical_illness + psychiatric_illness,
               family = binomial(link = "logit"), data = d_cc)
-out_s1 <- lm(K6_T3 ~ ace10_4 + llm_any + K6_T1 + age + female + bmi +
-               edu_high + smoking + alcohol + physical_illness, data = d_cc)
+out_s1 <- lm(K6_T3 ~ ace10_4 + llm_any + K6_T1 + age + female + edu_3cat + income_5cat + marital_3cat + employment_4cat +
+               smoking + alcohol + physical_illness + psychiatric_illness, data = d_cc)
 
 cat("-- Path a --\n")
 a_s1 <- summary(med_s1)$coefficients["ace10_4", ]
@@ -93,10 +125,11 @@ cat(sprintf("N = %d, ACE-10>=4: %d (%.1f%%)\n",
             nrow(d_users), sum(d_users$ace10_4), mean(d_users$ace10_4)*100))
 cat(strrep("=", 60), "\n\n")
 
-med_users <- lm(llm_mental ~ ace10_4 + K6_T1 + age + female + bmi + edu_high +
-                  smoking + alcohol + physical_illness, data = d_users)
-out_users <- lm(K6_T3 ~ ace10_4 + llm_mental + K6_T1 + age + female + bmi +
-                  edu_high + smoking + alcohol + physical_illness, data = d_users)
+med_users <- lm(llm_mental ~ ace10_4 + K6_T1 + age + female + edu_3cat + income_5cat + marital_3cat + employment_4cat +
+                  smoking + alcohol + physical_illness + psychiatric_illness, data = d_users)
+out_users <- lm(K6_T3 ~ ace10_4 + llm_mental + K6_T1 + age + female +
+                  edu_3cat + income_5cat + marital_3cat + employment_4cat +
+                  smoking + alcohol + physical_illness + psychiatric_illness, data = d_users)
 
 cat("-- Path a --\n")
 print(summary(med_users)$coefficients["ace10_4", ])
@@ -119,11 +152,11 @@ cat("SENSITIVITY 2B: ace10_4 -> LLM any use (binary) -> K6_T3\n")
 cat(sprintf("N = %d\n", nrow(d_users)))
 cat(strrep("=", 60), "\n\n")
 
-med_s2b <- glm(llm_any ~ ace10_4 + K6_T1 + age + female + bmi +
-                 edu_high + smoking + alcohol + physical_illness,
+med_s2b <- glm(llm_any ~ ace10_4 + K6_T1 + age + female + edu_3cat + income_5cat + marital_3cat + employment_4cat +
+                 smoking + alcohol + physical_illness + psychiatric_illness,
               family = binomial(link = "logit"), data = d_users)
-out_s2b <- lm(K6_T3 ~ ace10_4 + llm_any + K6_T1 + age + female + bmi +
-                 edu_high + smoking + alcohol + physical_illness, data = d_users)
+out_s2b <- lm(K6_T3 ~ ace10_4 + llm_any + K6_T1 + age + female + edu_3cat + income_5cat + marital_3cat + employment_4cat +
+                 smoking + alcohol + physical_illness + psychiatric_illness, data = d_users)
 
 cat(sprintf("\n-- Mediation (%d bootstrap) --\n", SIMS))
 set.seed(42)
@@ -142,10 +175,10 @@ cat(sprintf("N = %d, ACE-10>=4: %d (%.1f%%)\n",
             nrow(d_male), sum(d_male$ace10_4), mean(d_male$ace10_4)*100))
 cat(strrep("=", 60), "\n\n")
 
-med_m <- lm(llm_mental ~ ace10_4 + K6_T1 + age + bmi + edu_high +
-              smoking + alcohol + physical_illness, data = d_male)
-out_m <- lm(K6_T3 ~ ace10_4 + llm_mental + K6_T1 + age + bmi + edu_high +
-              smoking + alcohol + physical_illness, data = d_male)
+med_m <- lm(llm_mental ~ ace10_4 + K6_T1 + age + edu_3cat + income_5cat + marital_3cat + employment_4cat +
+              smoking + alcohol + physical_illness + psychiatric_illness, data = d_male)
+out_m <- lm(K6_T3 ~ ace10_4 + llm_mental + K6_T1 + age + edu_3cat + income_5cat + marital_3cat + employment_4cat +
+              smoking + alcohol + physical_illness + psychiatric_illness, data = d_male)
 
 cat("-- Path a --\n")
 print(summary(med_m)$coefficients["ace10_4", ])
@@ -168,11 +201,11 @@ cat("SUBGROUP MALE BINARY: ace10_4 -> LLM any use (binary) -> K6_T3\n")
 cat(sprintf("N = %d\n", nrow(d_male)))
 cat(strrep("=", 60), "\n\n")
 
-med_mb <- glm(llm_any ~ ace10_4 + K6_T1 + age + bmi +
-                edu_high + smoking + alcohol + physical_illness,
+med_mb <- glm(llm_any ~ ace10_4 + K6_T1 + age + edu_3cat + income_5cat + marital_3cat + employment_4cat +
+                smoking + alcohol + physical_illness + psychiatric_illness,
               family = binomial(link = "logit"), data = d_male)
-out_mb <- lm(K6_T3 ~ ace10_4 + llm_any + K6_T1 + age + bmi +
-                edu_high + smoking + alcohol + physical_illness, data = d_male)
+out_mb <- lm(K6_T3 ~ ace10_4 + llm_any + K6_T1 + age + edu_3cat + income_5cat + marital_3cat + employment_4cat +
+                smoking + alcohol + physical_illness + psychiatric_illness, data = d_male)
 
 cat(sprintf("\n-- Mediation (%d bootstrap) --\n", SIMS))
 set.seed(42)
@@ -191,10 +224,10 @@ cat(sprintf("N = %d, ACE-10>=4: %d (%.1f%%)\n",
             nrow(d_female), sum(d_female$ace10_4), mean(d_female$ace10_4)*100))
 cat(strrep("=", 60), "\n\n")
 
-med_f <- lm(llm_mental ~ ace10_4 + K6_T1 + age + bmi + edu_high +
-              smoking + alcohol + physical_illness, data = d_female)
-out_f <- lm(K6_T3 ~ ace10_4 + llm_mental + K6_T1 + age + bmi + edu_high +
-              smoking + alcohol + physical_illness, data = d_female)
+med_f <- lm(llm_mental ~ ace10_4 + K6_T1 + age + edu_3cat + income_5cat + marital_3cat + employment_4cat +
+              smoking + alcohol + physical_illness + psychiatric_illness, data = d_female)
+out_f <- lm(K6_T3 ~ ace10_4 + llm_mental + K6_T1 + age + edu_3cat + income_5cat + marital_3cat + employment_4cat +
+              smoking + alcohol + physical_illness + psychiatric_illness, data = d_female)
 
 cat("-- Path a --\n")
 print(summary(med_f)$coefficients["ace10_4", ])
@@ -217,11 +250,11 @@ cat("SUBGROUP FEMALE BINARY: ace10_4 -> LLM any use (binary) -> K6_T3\n")
 cat(sprintf("N = %d\n", nrow(d_female)))
 cat(strrep("=", 60), "\n\n")
 
-med_fb <- glm(llm_any ~ ace10_4 + K6_T1 + age + bmi +
-                edu_high + smoking + alcohol + physical_illness,
+med_fb <- glm(llm_any ~ ace10_4 + K6_T1 + age + edu_3cat + income_5cat + marital_3cat + employment_4cat +
+                smoking + alcohol + physical_illness + psychiatric_illness,
               family = binomial(link = "logit"), data = d_female)
-out_fb <- lm(K6_T3 ~ ace10_4 + llm_any + K6_T1 + age + bmi +
-                edu_high + smoking + alcohol + physical_illness, data = d_female)
+out_fb <- lm(K6_T3 ~ ace10_4 + llm_any + K6_T1 + age + edu_3cat + income_5cat + marital_3cat + employment_4cat +
+                smoking + alcohol + physical_illness + psychiatric_illness, data = d_female)
 
 cat(sprintf("\n-- Mediation (%d bootstrap) --\n", SIMS))
 set.seed(42)
@@ -258,7 +291,8 @@ fmt(res_fb, nrow(d_female), "Subgroup: Female, BINARY")
 sink(file.path(output_path, "mediation_3wave_results.txt"))
 cat("Causal Mediation Analysis (3-wave) — H2 ACE-10\n")
 cat("Main exposure: ACE-10 >= 4 (T1) | Outcome: K6_T3 (continuous)\n")
-cat("Covariates: K6_T1, age, sex, BMI, edu, smoking, alcohol, physical illness\n")
+cat("Covariates: K6_T1, age, sex, education (3-cat), income (5-cat incl. unknown),\n")
+cat("            marital (3-cat), employment (4-cat), smoking, alcohol, physical illness\n")
 cat(sprintf("Full sample N = %d\n\n", nrow(d_cc)))
 
 cat("===== MAIN: ACE-10>=4 -> LLM mental freq (continuous) =====\n")

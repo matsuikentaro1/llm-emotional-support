@@ -1,15 +1,45 @@
 # ============================================================
-# Mediation by individual LLM use cases and aggregate indicators (T2).
-# Exposures: K6 >= 13 at T1; ACE-10 >= 4 at T1.
-# Outcome:   K6 at T3.
+# Supplementary Table 2: Mediation by individual LLM use cases (T2)
+#
+# Rationale:
+#   Map the harmful mediator-outcome pathway across all nine LLM use
+#   cases. We test each Q37S3.1-9 use case individually as its own
+#   T2 mediator (use 1-8 = non-emotional-support; use 9 = emotional
+#   support, identical model spec to the main analysis full-sample
+#   continuous row), plus three aggregate indicators (sum, max,
+#   binary current AI user) for completeness. Full sample only;
+#   subgroups remain in Tables 2 and 3.
+#
+# Exposures (rows):
+#   H1. K6 >= 13 at T1 (binary)
+#   H2. ACE-10 >= 4 at T1 (binary)
+#
+# Mediators (columns), per exposure:
+#   M01-M08. llm_use_1..8 (continuous, 1-5)  = Q37S3.1..8 (eight non-
+#            emotional-support use cases)
+#   M09.     llm_mental (continuous, 1-5)    = Q37S3.9 (emotional support;
+#            primary mediator in the main analysis)
+#   M10.     llm_gen_sum (continuous, 9-45)  = sum(Q37S3.1..9)
+#   M11.     llm_gen_max (continuous, 1-5)   = max(Q37S3.1..9)
+#   M12.     llm_gen_any (binary, 0/1)       = (llm_gen_max >= 2)
+#            (any of nine T2 use-purpose items reported >= "Rarely")
+#
+# Outcome:   K6 at T3 (continuous, 0-24)
+# Covariates for H1: ACE-10 count, age, sex, education (3-cat),
+#                    income (5-cat incl. unknown), marital (3-cat),
+#                    employment (4-cat), smoking, alcohol, physical illness.
+# Covariates for H2: K6 at T1, age, sex, education (3-cat),
+#                    income (5-cat incl. unknown), marital (3-cat),
+#                    employment (4-cat), smoking, alcohol, physical illness.
 # ============================================================
 
 library(mediation)
+library(car)
 
 data_path   <- file.path(getwd(), "data", "3wave_analysis.csv")
 output_path <- file.path(getwd(), "analysis")
 
-d <- read.csv(data_path, fileEncoding = "UTF-8-BOM")
+d <- read.csv(data_path, fileEncoding = "UTF-8-BOM", na.strings = c("", "NA"))
 cat("N =", nrow(d), "\n")
 
 # ---- Prepare variables ----
@@ -19,19 +49,39 @@ d$k6t1_13 <- as.integer(d$K6_T1 >= 13)
 # items reported >= "Rarely") instead of the self-reported llm_start question.
 d$llm_gen_any <- as.integer(d$llm_gen_max >= 2)
 
+# Factor encoding with explicit reference levels
+d$edu_3cat        <- factor(d$edu_3cat,        levels = c("high_school", "vocational", "university"))
+d$income_5cat     <- factor(d$income_5cat,     levels = c("mid", "low", "mid_high", "high", "unknown"))
+d$marital_3cat    <- factor(d$marital_3cat,    levels = c("married", "never", "separated"))
+d$employment_4cat <- factor(d$employment_4cat, levels = c("regular", "non_regular", "self_employed", "not_working"))
+
 individual_meds <- c(paste0("llm_use_", 1:8), "llm_mental")  # use 1..8 + emotional support (use 9)
 aggregate_meds  <- c("llm_gen_sum", "llm_gen_max", "llm_gen_any")
 
 vars_needed <- c("K6_T1", "K6_T3", "k6t1_13", "ace10_count", "ace10_4",
                  individual_meds, aggregate_meds,
-                 "age", "female", "bmi", "edu_high",
-                 "smoking", "alcohol", "physical_illness")
+                 "age", "female",
+                 "edu_3cat", "income_5cat", "marital_3cat", "employment_4cat",
+                 "smoking", "alcohol", "physical_illness", "psychiatric_illness")
 d_cc <- d[complete.cases(d[, vars_needed]), ]
 cat("Complete cases:", nrow(d_cc), "\n")
 cat(sprintf("  K6 >= 13 at T1: %d (%.1f%%)\n",
             sum(d_cc$k6t1_13), mean(d_cc$k6t1_13) * 100))
 cat(sprintf("  ACE-10 >= 4:    %d (%.1f%%)\n",
             sum(d_cc$ace10_4),  mean(d_cc$ace10_4)  * 100))
+
+# Pre-flight VIF check
+vif_model <- lm(K6_T3 ~ k6t1_13 + llm_mental + ace10_count + age + female +
+                  edu_3cat + income_5cat + marital_3cat + employment_4cat +
+                  smoking + alcohol + physical_illness + psychiatric_illness, data = d_cc)
+vif_vals <- car::vif(vif_model)
+vif_scalar <- if (is.matrix(vif_vals)) vif_vals[, "GVIF^(1/(2*Df))"]^2 else vif_vals
+cat("VIF scalar:\n"); print(round(vif_scalar, 3))
+if (any(vif_scalar > 5)) {
+  stop("VIF > 5 detected. Offending variables: ",
+       paste(names(vif_scalar)[vif_scalar > 5], collapse = ", "))
+}
+cat(">>> All VIFs <= 5. Proceeding.\n\n")
 
 SIMS <- 5000
 
@@ -71,8 +121,8 @@ dump_section <- function(label, med_fit, out_fit, res) {
 # mediate()'s bootstrap update() can re-fit without depending on
 # function-local variables like `med_formula`.
 run_continuous <- function(exposure, mediator, label_prefix) {
-  cov_str_h1 <- "ace10_count + age + female + bmi + edu_high + smoking + alcohol + physical_illness"
-  cov_str_h2 <- "K6_T1 + age + female + bmi + edu_high + smoking + alcohol + physical_illness"
+  cov_str_h1 <- "ace10_count + age + female + edu_3cat + income_5cat + marital_3cat + employment_4cat + smoking + alcohol + physical_illness + psychiatric_illness"
+  cov_str_h2 <- "K6_T1 + age + female + edu_3cat + income_5cat + marital_3cat + employment_4cat + smoking + alcohol + physical_illness + psychiatric_illness"
   cov_str <- if (exposure == "k6t1_13") cov_str_h1 else cov_str_h2
 
   med_formula <- as.formula(sprintf("%s ~ %s + %s", mediator, exposure, cov_str))
@@ -94,8 +144,8 @@ run_continuous <- function(exposure, mediator, label_prefix) {
 }
 
 run_binary_any <- function(exposure, label_prefix) {
-  cov_str_h1 <- "ace10_count + age + female + bmi + edu_high + smoking + alcohol + physical_illness"
-  cov_str_h2 <- "K6_T1 + age + female + bmi + edu_high + smoking + alcohol + physical_illness"
+  cov_str_h1 <- "ace10_count + age + female + edu_3cat + income_5cat + marital_3cat + employment_4cat + smoking + alcohol + physical_illness + psychiatric_illness"
+  cov_str_h2 <- "K6_T1 + age + female + edu_3cat + income_5cat + marital_3cat + employment_4cat + smoking + alcohol + physical_illness + psychiatric_illness"
   cov_str <- if (exposure == "k6t1_13") cov_str_h1 else cov_str_h2
 
   med_formula <- as.formula(sprintf("llm_gen_any ~ %s + %s", exposure, cov_str))
