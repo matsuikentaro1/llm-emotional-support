@@ -264,6 +264,38 @@ res_fb <- mediate(med_fb, out_fb, treat = "k6t1_13", mediator = "llm_any",
 print(summary(res_fb))
 
 # ============================================================
+# AGE-STRATIFIED SUBGROUPS: 18-34, 35-49, 50-64, 65+
+# ============================================================
+d_cc$age_4cat <- cut(d_cc$age, breaks = c(-Inf, 34, 49, 64, Inf),
+                     labels = c("18-34", "35-49", "50-64", "65+"))
+cat("\nAge stratum sample sizes:\n")
+print(table(d_cc$age_4cat))
+
+age_results <- list()
+for (stratum in c("18-34", "35-49", "50-64", "65+")) {
+  d_s <- d_cc[d_cc$age_4cat == stratum, ]
+  n_s <- nrow(d_s)
+  cat(sprintf("\n%s\nSUBGROUP AGE %s: K6>=13(T1) -> LLM mental -> K6_T3  (N=%d)\n%s\n",
+              strrep("=", 60), stratum, n_s, strrep("=", 60)))
+  if (n_s < 200) {
+    cat("  Skipped (N < 200, unstable)\n")
+    next
+  }
+  assign("d_s", d_s, envir = globalenv())
+  med_f_age <- as.formula("llm_mental ~ k6t1_13 + ace10_count + age + female + edu_3cat + income_5cat + marital_3cat + employment_4cat + smoking + alcohol + physical_illness + psychiatric_illness")
+  out_f_age <- as.formula("K6_T3 ~ k6t1_13 + llm_mental + ace10_count + age + female + edu_3cat + income_5cat + marital_3cat + employment_4cat + smoking + alcohol + physical_illness + psychiatric_illness")
+  environment(med_f_age) <- globalenv()
+  environment(out_f_age) <- globalenv()
+  med_age <- eval(bquote(lm(.(med_f_age), data = d_s)), envir = globalenv())
+  out_age <- eval(bquote(lm(.(out_f_age), data = d_s)), envir = globalenv())
+  set.seed(42)
+  res_age <- mediate(med_age, out_age, treat = "k6t1_13", mediator = "llm_mental",
+                     boot = TRUE, sims = SIMS)
+  print(summary(res_age))
+  age_results[[stratum]] <- list(n = n_s, med = med_age, out = out_age, res = res_age)
+}
+
+# ============================================================
 # Summary
 # ============================================================
 cat("\n", strrep("=", 60), "\n")
@@ -285,6 +317,10 @@ fmt(res_m,    nrow(d_male),   "Subgroup: Male (K6>=13, continuous)")
 fmt(res_mb,   nrow(d_male),   "Subgroup: Male BIN (K6>=13, binary)")
 fmt(res_f,    nrow(d_female), "Subgroup: Female (K6>=13, continuous)")
 fmt(res_fb,   nrow(d_female), "Subgroup: Female BIN (K6>=13, binary)")
+for (s in names(age_results)) {
+  r <- age_results[[s]]
+  fmt(r$res, r$n, sprintf("Subgroup: Age %s (K6>=13, continuous)", s))
+}
 
 # ============================================================
 # Save
@@ -335,6 +371,14 @@ cat(sprintf("\n\n===== SUBGROUP: FEMALE BINARY (N=%d) =====\n", nrow(d_female)))
 cat("\nMediator:\n"); print(summary(med_fb))
 cat("\nOutcome:\n"); print(summary(out_fb))
 cat("\nMediation:\n"); print(summary(res_fb))
+
+for (s in names(age_results)) {
+  r <- age_results[[s]]
+  cat(sprintf("\n\n===== SUBGROUP: AGE %s (N=%d) =====\n", s, r$n))
+  cat("\nMediator:\n"); print(summary(r$med))
+  cat("\nOutcome:\n"); print(summary(r$out))
+  cat("\nMediation:\n"); print(summary(r$res))
+}
 sink()
 
 cat("\nAll results saved to analysis/mediation_k6exposure_13_results.txt\n")

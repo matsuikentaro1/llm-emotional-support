@@ -2,4 +2,5 @@
 .RData
 .Ruserdata
 .Rproj.user/
-data/*.csv
+data/
+analysis/
