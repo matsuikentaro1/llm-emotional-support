@@ -4,3 +4,6 @@
 .Rproj.user/
 data/
 analysis/
+trash/
+figures/
+__pycache__/

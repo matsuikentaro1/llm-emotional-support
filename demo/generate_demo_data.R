@@ -76,3 +76,45 @@ if (!interactive()) out_path <- file.path("demo", "demo_data.csv")
 
 write.csv(d, out_path, row.names = FALSE)
 cat("Wrote", out_path, "(", nrow(d), "rows )\n")
+
+# ------------------------------------------------------------
+# Demo file for the representativeness comparison (script 07):
+# T1 characteristics of a simulated eligible T1 sample, with an
+# indicator of inclusion in the analytic sample. Rows with
+# in_analytic = 1 are the participants in demo_data.csv.
+# ------------------------------------------------------------
+N_extra <- 1800
+t1_vars <- c("age", "female", "K6_T1", "ace10_count", "ace10_4",
+             "edu_3cat", "income_5cat", "marital_3cat", "employment_4cat",
+             "smoking", "alcohol", "physical_illness", "psychiatric_illness")
+
+a1 <- data.frame(ID = d$ID, in_analytic = 1L, d[, t1_vars], stringsAsFactors = FALSE)
+
+a0 <- data.frame(
+  ID                  = N + seq_len(N_extra),
+  in_analytic         = 0L,
+  age                 = rint(N_extra, 15, 84),
+  female              = rbin(N_extra, 0.55),
+  K6_T1               = pmin(24L, pmax(0L, rnbinom(N_extra, size = 1.5, mu = 5.5))),
+  ace10_count         = pmin(10L, rnbinom(N_extra, size = 0.5, mu = 0.65)),
+  stringsAsFactors = FALSE
+)
+a0$ace10_4            <- as.integer(a0$ace10_count >= 4)
+a0$edu_3cat           <- rcat(N_extra, c("high_school", "vocational", "university"),
+                              c(0.32, 0.2, 0.48))
+a0$edu_3cat[sample(N_extra, 20)] <- NA
+a0$income_5cat        <- rcat(N_extra, c("mid", "low", "mid_high", "high", "unknown"),
+                              c(0.28, 0.2, 0.18, 0.12, 0.22))
+a0$marital_3cat       <- rcat(N_extra, c("married", "never", "separated"),
+                              c(0.55, 0.3, 0.15))
+a0$employment_4cat    <- rcat(N_extra, c("regular", "non_regular", "self_employed", "not_working"),
+                              c(0.4, 0.22, 0.1, 0.28))
+a0$smoking            <- rbin(N_extra, 0.18)
+a0$alcohol            <- rbin(N_extra, 0.45)
+a0$physical_illness   <- rbin(N_extra, 0.3)
+a0$psychiatric_illness <- rbin(N_extra, 0.1)
+
+a <- rbind(a1, a0[, names(a1)])
+out_path2 <- sub("demo_data.csv", "demo_attrition_t1.csv", out_path, fixed = TRUE)
+write.csv(a, out_path2, row.names = FALSE)
+cat("Wrote", out_path2, "(", nrow(a), "rows )\n")
