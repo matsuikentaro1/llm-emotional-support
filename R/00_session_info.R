@@ -8,7 +8,7 @@
 output_path <- file.path(getwd(), "analysis")
 dir.create(output_path, showWarnings = FALSE, recursive = TRUE)
 
-pkgs <- c("mediation", "dplyr", "car", "ggplot2", "patchwork", "openxlsx")
+pkgs <- c("mediation", "dplyr", "car", "ggplot2", "patchwork", "ragg", "openxlsx")
 # Load each package so sessionInfo() records attached/loaded versions.
 for (p in pkgs) {
   if (requireNamespace(p, quietly = TRUE)) {

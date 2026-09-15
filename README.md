@@ -3,17 +3,17 @@
 Analysis code for:
 
 Matsui K, Nakagomi A, Hazumi M, Stickley A, Kuriyama K, Tabuchi T.
-*Emotional-support use of large language models and subsequent
-psychological distress: A three-wave longitudinal mediation study of
-Japanese adults.* (under review)
+*Use of large language models for emotional support as a mediator
+between baseline vulnerability and subsequent psychological distress:
+A three-wave study of Japanese adults.* (under review)
 
 Individual-level data are not publicly shared due to ethical
 restrictions; requests can be directed to the corresponding author.
 
 ## Requirements
 
-- R >= 4.3 with `mediation`, `dplyr`, `car`, `ggplot2`, `patchwork`
-  (`openxlsx` optional)
+- R >= 4.3 with `mediation`, `dplyr`, `car`, `ggplot2`, `patchwork`,
+  `ragg` (`openxlsx` optional)
 
 ## How to run
 
@@ -28,7 +28,9 @@ cp demo/demo_attrition_t1.csv data/attrition_t1.csv
 Rscript R/01_mediation_H1_K6ge13.R   # and so on, in numerical order
 ```
 
-Outputs are written to `analysis/` and `figures/`.
+Outputs are written to `analysis/` and `figures/`. The scripts are
+numbered in dependency order: script 11 reads the table written by
+script 10, and the text logs written by scripts 01 and 02.
 
 ## Scripts
 
@@ -44,9 +46,8 @@ Outputs are written to `analysis/` and `figures/`.
 | `07_representativeness_smd.R` | Suppl. Table 1 |
 | `08_table1_descriptives.R` | Table 1 |
 | `09_fig_llm_use_by_age_sex.R` | Fig. 3 |
-| `10_fig_forest_subgroups.R` | Fig. 4 |
-
-Fig. 1, Fig. 2 and Supplementary Figure 1 were drawn manually.
+| `10_age_stratified_table.R` | Suppl. Table 3 (age strata); input for Fig. 4 |
+| `11_fig_forest_subgroups.R` | Fig. 4 |
 
 ## License
 
