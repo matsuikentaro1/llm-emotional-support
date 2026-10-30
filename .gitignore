@@ -1,0 +1,9 @@
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+data/
+analysis/
+trash/
+figures/
+__pycache__/
