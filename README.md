@@ -45,10 +45,10 @@ draws the causal diagrams and reads no data.
 | `06_medsens_fine.R` | Suppl. Table 4c (finer rho grid) |
 | `07_representativeness_smd.R` | Suppl. Table 1 |
 | `08_table1_descriptives.R` | Table 1 |
-| `09_fig_llm_use_by_age_sex.R` | Fig. 3 |
-| `10_age_stratified_table.R` | Suppl. Table 3 (age strata); input for Fig. 4 |
-| `11_fig_forest_subgroups.R` | Fig. 4 |
-| `12_fig_dag_models.R` | Fig. 2 |
+| `09_fig_llm_use_by_age_sex.R` | Figure 2 |
+| `10_age_stratified_table.R` | Suppl. Table 3 (age strata); input for Figure 3 |
+| `11_fig_forest_subgroups.R` | Figure 3 |
+| `12_fig_dag_models.R` | Figure 1 |
 
 ## License
 
